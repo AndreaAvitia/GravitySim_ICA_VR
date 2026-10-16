@@ -417,3 +417,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   factorEscalaGravedad: 0.728
+  tiempoDeVida: 45

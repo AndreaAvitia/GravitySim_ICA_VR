@@ -132,7 +132,7 @@ GameObject:
   - component: {fileID: 274489346}
   m_Layer: 0
   m_Name: DEMO_Terrain_03
-  m_TagString: Untagged
+  m_TagString: Suelo
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
@@ -225,7 +225,7 @@ GameObject:
   - component: {fileID: 364352451}
   m_Layer: 0
   m_Name: DEMO_Terrain_05
-  m_TagString: Untagged
+  m_TagString: Suelo
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
@@ -336,6 +336,10 @@ PrefabInstance:
     - target: {fileID: 2783776202866249046, guid: 121efcaa1326f3b488d054c749be17a7, type: 3}
       propertyPath: m_LocalPosition.z
       value: 4.27
+      objectReference: {fileID: 0}
+    - target: {fileID: 3121893489248298955, guid: 121efcaa1326f3b488d054c749be17a7, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4195258538940434921, guid: 121efcaa1326f3b488d054c749be17a7, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1583,7 +1587,7 @@ GameObject:
   - component: {fileID: 1304190711}
   m_Layer: 0
   m_Name: DEMO_Terrain_01
-  m_TagString: Untagged
+  m_TagString: Suelo
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
@@ -1676,7 +1680,7 @@ GameObject:
   - component: {fileID: 1313927645}
   m_Layer: 0
   m_Name: Terrain_(1000.00, 0.00, 0.00)
-  m_TagString: Untagged
+  m_TagString: Suelo
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
@@ -1818,7 +1822,7 @@ GameObject:
   - component: {fileID: 1766161746}
   m_Layer: 0
   m_Name: DEMO_Terrain_02
-  m_TagString: Untagged
+  m_TagString: Suelo
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
@@ -1911,7 +1915,7 @@ GameObject:
   - component: {fileID: 1771427385}
   m_Layer: 0
   m_Name: DEMO_Terrain_04
-  m_TagString: Untagged
+  m_TagString: Suelo
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
