@@ -13,17 +13,26 @@ public class BalonVR : MonoBehaviour
     private bool aplicarEmpuje = false;
 
     [Header("Escala de Gravedad por Planeta (VR)")]
-    [Tooltip("Subimos un poco la gravedad en Tierra (de 0.18 a 0.24).")]
+    [Tooltip("Gravedad calibrada en la Tierra (original 0.24).")]
     [Range(0.05f, 1.0f)]
-    public float gravedadCalibradaTierra = 0.24f;
+    public float gravedadCalibradaTierra = 0.28f;
 
     [Tooltip("Marte intacto en 0.55 (aprobado).")]
     [Range(0.2f, 1.0f)]
     public float escalaGravedadMarte = 0.55f;
 
-    [Tooltip("Subimos un poco la gravedad en Luna (de 0.80 a 0.95).")]
+    [Tooltip("Luna en 0.95.")]
     [Range(0.2f, 1.5f)]
     public float gravedadCalibradaLuna = 0.95f;
+
+    [Header("Caída en la Tierra")]
+    [Tooltip("Gravedad extra SOLO cuando el balón ya va bajando (1 = sin extra, 1.3 = caída ligeramente más firme).")]
+    [Range(1f, 3f)]
+    public float multiplicadorCaidaTierra = 1.3f;
+
+    [Tooltip("Elevación extra al lanzar en la Tierra (original 1.35). Más = el balón sube más y dura más en el aire.")]
+    [Range(0f, 1.5f)]
+    public float impulsoVerticalTierra = 1.15f;
 
     [Header("Optimización")]
     [Tooltip("Segundos antes de desaparecer después de soltarlo (120 = 2 minutos)")]
@@ -33,6 +42,11 @@ public class BalonVR : MonoBehaviour
     private float _multiplicadorHorizontal = 1.0f;
     private float _multiplicadorVertical = 1.0f;
     private float _frenoHorizontal = 0.997f;
+
+    // Parámetros que cambian según el planeta (los valores por defecto son los originales)
+    private float _multiplicadorCaida = 1.0f;
+    private float _asistenciaElevacion = 1.1f;
+    private float _impulsoVerticalExtra = 1.35f;
 
     void Awake()
     {
@@ -105,12 +119,16 @@ public class BalonVR : MonoBehaviour
     {
         float gAbs = Mathf.Abs(gravedadY);
 
-        if (gravedadY <= -9.8f) // TIERRA (Un poco más de gravedad que en 0.18)
+        if (gravedadY <= -9.8f) // TIERRA (cae más rápido)
         {
             _gravedadVerticalEfectiva = gAbs * gravedadCalibradaTierra;
-            _multiplicadorHorizontal = 2.7f;
-            _multiplicadorVertical = 2.45f;
+            _multiplicadorHorizontal = 3.5f;
+            _multiplicadorVertical = 2.65f;
             _frenoHorizontal = 0.9985f;
+
+            _multiplicadorCaida = multiplicadorCaidaTierra; // más gravedad al bajar
+            _asistenciaElevacion = 0f;                      // sin "flotar" en el punto más alto
+            _impulsoVerticalExtra = impulsoVerticalTierra;  // menos elevación al lanzar
         }
         else if (gravedadY <= -3.7f) // MARTE (Intacto)
         {
@@ -118,13 +136,21 @@ public class BalonVR : MonoBehaviour
             _multiplicadorHorizontal = 2.6f;
             _multiplicadorVertical = 2.2f;
             _frenoHorizontal = 0.998f;
+
+            _multiplicadorCaida = 1.0f;
+            _asistenciaElevacion = 1.1f;
+            _impulsoVerticalExtra = 1.35f;
         }
-        else if (gravedadY <= -0.1f) // LUNA (Un poco más de gravedad que en 0.80)
+        else if (gravedadY <= -0.1f) // LUNA (Intacto)
         {
             _gravedadVerticalEfectiva = gAbs * gravedadCalibradaLuna;
             _multiplicadorHorizontal = 2.65f;
             _multiplicadorVertical = 2.15f;
             _frenoHorizontal = 0.998f;
+
+            _multiplicadorCaida = 1.0f;
+            _asistenciaElevacion = 1.1f;
+            _impulsoVerticalExtra = 1.35f;
         }
         else // ESPACIO (0)
         {
@@ -132,6 +158,10 @@ public class BalonVR : MonoBehaviour
             _multiplicadorHorizontal = 2.0f;
             _multiplicadorVertical = 1.0f;
             _frenoHorizontal = 1.0f;
+
+            _multiplicadorCaida = 1.0f;
+            _asistenciaElevacion = 1.1f;
+            _impulsoVerticalExtra = 1.35f;
         }
     }
 
@@ -147,32 +177,36 @@ public class BalonVR : MonoBehaviour
             if (velocidadDeMano > 0.8f)
             {
                 Vector3 direccionTiro = rb.linearVelocity.normalized;
-                Vector3 impulsoExtra = (direccionTiro * 0.65f) + (Vector3.up * 1.35f);
+                Vector3 impulsoExtra = (direccionTiro * 0.85f) + (Vector3.up * _impulsoVerticalExtra);
                 Vector3 vel = rb.linearVelocity + impulsoExtra;
 
                 vel.x *= _multiplicadorHorizontal;
                 vel.z *= _multiplicadorHorizontal;
-                vel.y *= (_multiplicadorVertical * 0.62f);
+                vel.y *= (_multiplicadorVertical * 0.6f);
 
                 rb.linearVelocity = vel;
             }
         }
 
+        // Gravedad (con extra solo cuando el balón ya va bajando)
+        float g = _gravedadVerticalEfectiva;
+        if (rb.linearVelocity.y < 0f)
+            g *= _multiplicadorCaida;
+
+        rb.linearVelocity += Vector3.down * (g * Time.fixedDeltaTime);
+
         if (estaEnVuelo)
         {
-            rb.linearVelocity += Vector3.down * (_gravedadVerticalEfectiva * Time.fixedDeltaTime);
-
-            if (Mathf.Abs(rb.linearVelocity.y) < 1.0f && rb.linearVelocity.magnitude > 1.0f)
+            // Asistencia de elevación (desactivada en la Tierra)
+            if (_asistenciaElevacion > 0f
+                && Mathf.Abs(rb.linearVelocity.y) < 1.0f
+                && rb.linearVelocity.magnitude > 1.0f)
             {
-                rb.linearVelocity += Vector3.up * (1.1f * Time.fixedDeltaTime);
+                rb.linearVelocity += Vector3.up * (_asistenciaElevacion * Time.fixedDeltaTime);
             }
 
             Vector3 velH = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z) * _frenoHorizontal;
             rb.linearVelocity = new Vector3(velH.x, rb.linearVelocity.y, velH.z);
-        }
-        else
-        {
-            rb.linearVelocity += Vector3.down * (_gravedadVerticalEfectiva * Time.fixedDeltaTime);
         }
     }
 

@@ -18,22 +18,31 @@ public class DardoVR : MonoBehaviour
     public string tagTablero = "TableroDardos";
     public float profundidadClavado = 0.02f;
 
-    [Header("Falsificación de Gravedad (Parábola más recta)")]
-    [Tooltip("Escala de caída en vuelo para Luna/Marte (0.24 = curva suave y tendida).")]
-    [Range(0.1f, 0.8f)]
-    public float escalaVueloBajaGravedad = 0.24f;
+    [Header("Falsificación de Gravedad (Parábola muy plana)")]
+    [Tooltip("Escala de caída en vuelo para Luna/Marte (0.15 = vuelo súper plano).")]
+    [Range(0.05f, 0.5f)]
+    public float escalaVueloBajaGravedad = 0.15f;
 
-    [Tooltip("Escala de caída en vuelo para la Tierra (0.40 = arco menos pronunciado).")]
-    [Range(0.2f, 0.8f)]
-    public float escalaVueloTierra = 0.40f;
+    [Tooltip("Escala de caída en vuelo para la Tierra (0.10 = trayectoria casi recta).")]
+    [Range(0.02f, 0.5f)]
+    public float escalaVueloTierra = 0.10f;
 
     [Tooltip("Escala de gravedad tras rebotar en el piso en la Tierra (0.85 = cae firme al pasto).")]
     [Range(0.5f, 1.0f)]
     public float factorEscalaTierraPiso = 0.85f;
 
+    [Header("Trayectoria plana al inicio del vuelo")]
+    [Tooltip("Fracción de la gravedad al soltar el dardo (0 = sin caída al inicio, 1 = gravedad completa).")]
+    [Range(0f, 1f)]
+    public float gravedadInicialFraccion = 0.15f;
+
+    [Tooltip("Segundos que tarda la gravedad en llegar al 100% (0 = desactivado).")]
+    [Range(0f, 2f)]
+    public float duracionRampaGravedad = 0.35f;
+
     [Header("Impulso de Lanzamiento")]
-    public float impulsoBajaGravedad = 3.7f;
-    public float impulsoAltaGravedad = 3.2f;
+    public float impulsoBajaGravedad = 4.2f;
+    public float impulsoAltaGravedad = 4.6f;
     public float umbralLanzamiento = 0.8f;
 
     [Header("Optimización")]
@@ -45,6 +54,7 @@ public class DardoVR : MonoBehaviour
     private float _multiplicadorHorizontal;
     private float _multiplicadorVertical;
     private float _frenoHorizontal;
+    private float _tiempoVuelo;
 
     void Awake()
     {
@@ -53,6 +63,10 @@ public class DardoVR : MonoBehaviour
         dardoCollider = GetComponent<Collider>();
 
         rb.useGravity = false;
+        rb.linearDamping = 0f; // sin rozamiento del aire para no "frenar" el vuelo
+
+        // A mayor velocidad, evita que el dardo atraviese el tablero
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
     }
 
     void OnEnable()
@@ -107,6 +121,7 @@ public class DardoVR : MonoBehaviour
             rb.isKinematic = false;
             rb.useGravity = false;
             aplicarEmpuje = true;
+            _tiempoVuelo = 0f;
 
             CalcularParametrosPorGravedad(Physics.gravity.y);
 
@@ -140,9 +155,9 @@ public class DardoVR : MonoBehaviour
         float tSliderCompleto = Mathf.InverseLerp(0f, 19.62f, gAbs);
         _multiplicadorHorizontal = Mathf.Lerp(impulsoBajaGravedad, impulsoAltaGravedad, tSliderCompleto);
 
-        // Reducimos el multiplicador vertical para aplanar la parábola
-        _multiplicadorVertical = Mathf.Lerp(0.85f, 0.65f, tSliderCompleto);
-        _frenoHorizontal = Mathf.Lerp(0.999f, 0.996f, tSliderCompleto);
+        // Multiplicadores verticales muy bajos para mantener la línea de vuelo sumamente plana
+        _multiplicadorVertical = Mathf.Lerp(0.55f, 0.45f, tSliderCompleto);
+        _frenoHorizontal = Mathf.Lerp(0.999f, 0.997f, tSliderCompleto);
     }
 
     void FixedUpdate()
@@ -159,8 +174,8 @@ public class DardoVR : MonoBehaviour
             if (velocidadDeMano > umbralLanzamiento)
             {
                 Vector3 direccionMano = rb.linearVelocity.normalized;
-                // Mayor empuje frontal (0.55) y mínima elevación (0.04) para un tiro más tenso y recto
-                Vector3 impulsoExtra = (direccionMano * 0.55f) + (Vector3.up * 0.04f);
+                // Impulso frontal fuerte y elevación casi nula (0.01) para trayectoria plana
+                Vector3 impulsoExtra = (direccionMano * 0.65f) + (Vector3.up * 0.01f);
                 Vector3 vel = rb.linearVelocity + impulsoExtra;
 
                 vel.x *= _multiplicadorHorizontal;
@@ -173,7 +188,15 @@ public class DardoVR : MonoBehaviour
 
         if (estaEnVuelo)
         {
-            rb.linearVelocity += Vector3.down * (_gravedadVueloEfectiva * Time.fixedDeltaTime);
+            // Gravedad progresiva: casi nula al soltar y sube hasta el valor normal.
+            // Así el primer tramo del vuelo es una línea recta y la caída llega al final.
+            _tiempoVuelo += Time.fixedDeltaTime;
+            float rampa = duracionRampaGravedad > 0f
+                ? Mathf.Clamp01(_tiempoVuelo / duracionRampaGravedad)
+                : 1f;
+            float factorRampa = Mathf.Lerp(gravedadInicialFraccion, 1f, rampa);
+
+            rb.linearVelocity += Vector3.down * (_gravedadVueloEfectiva * factorRampa * Time.fixedDeltaTime);
 
             Vector3 velH = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z) * _frenoHorizontal;
             rb.linearVelocity = new Vector3(velH.x, rb.linearVelocity.y, velH.z);
