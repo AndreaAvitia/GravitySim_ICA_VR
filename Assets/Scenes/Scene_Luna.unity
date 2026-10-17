@@ -5375,7 +5375,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 534079f8fbd400743977cf3fb12b9643, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  factorEscalaGravedad: 0.85
+  gravedadCalibradaTierra: 0.28
+  escalaGravedadMarte: 0.55
+  gravedadCalibradaLuna: 0.95
+  multiplicadorCaidaTierra: 1.3
+  impulsoVerticalTierra: 1.15
+  tiempoDeVida: 120
 --- !u!4 &4109521106568389151
 Transform:
   m_ObjectHideFlags: 0
@@ -5524,7 +5529,7 @@ GameObject:
   - component: {fileID: 3730061425798258395}
   m_Layer: 3
   m_Name: Terrain
-  m_TagString: Untagged
+  m_TagString: Suelo
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 4294967295
