@@ -1,3 +1,4 @@
+
 using UnityEngine;
 using UltimateXR.Manipulation;
 
@@ -12,50 +13,48 @@ public class DardoVR : MonoBehaviour
     private bool estaAgarrado = false;
     private bool estaClavado = false;
     private bool estaEnVuelo = false;
-    private bool fueLanzado = false;
+    private bool aplicarEmpuje = false;
 
     [Header("Configuración de Impacto")]
     public string tagTablero = "TableroDardos";
     public float profundidadClavado = 0.02f;
 
-    [Header("1. Velocidad según la Gravedad (Más lento a menor gravedad)")]
-    [Tooltip("Velocidad muy lenta en baja gravedad (Luna / Cero = 2.2 m/s).")]
-    public float velocidadBajaGravedadV5 = 2.2f;
+    [Header("Falsificación de Gravedad (Parábola muy plana)")]
+    [Tooltip("Escala de caída en vuelo para Luna/Marte (0.15 = vuelo súper plano).")]
+    [Range(0.05f, 0.5f)]
+    public float escalaVueloBajaGravedad = 0.15f;
 
-    [Tooltip("Velocidad moderada en la Tierra (6.5 m/s, mucho más controlada que antes).")]
-    public float velocidadTierraV5 = 6.5f;
+    [Tooltip("Escala de caída en vuelo para la Tierra (0.10 = trayectoria casi recta).")]
+    [Range(0.02f, 0.5f)]
+    public float escalaVueloTierra = 0.10f;
 
-    [Tooltip("Velocidad máxima si el slider personalizado sube hasta 19.62.")]
-    public float velocidadAltaGravedadV5 = 9.0f;
-
-    [Header("2. Forma de la Parábola (Menor amplitud)")]
-    [Tooltip("Elevación mínima (0.03 = casi no sube el arco).")]
-    [Range(0.0f, 0.2f)]
-    public float elevacionArcoV5 = 0.03f;
-
-    [Tooltip("Caída de la parábola en baja gravedad (0.35 = curva suave acorde a la baja velocidad).")]
-    public float gravedadParabolaBajaV5 = 0.35f;
-
-    [Tooltip("Caída de la parábola en la Tierra (2.4 = curva más cerrada y con menos amplitud).")]
-    public float gravedadParabolaTierraV5 = 2.4f;
-
-    [Header("3. Soltar sin lanzar / Piso")]
-    public float umbralLanzamiento = 0.35f;
+    [Tooltip("Escala de gravedad tras rebotar en el piso en la Tierra (0.85 = cae firme al pasto).")]
+    [Range(0.5f, 1.0f)]
     public float factorEscalaTierraPiso = 0.85f;
 
+    [Header("Trayectoria plana al inicio del vuelo")]
+    [Tooltip("Fracción de la gravedad al soltar el dardo (0 = sin caída al inicio, 1 = gravedad completa).")]
+    [Range(0f, 1f)]
+    public float gravedadInicialFraccion = 0.15f;
+
+    [Tooltip("Segundos que tarda la gravedad en llegar al 100% (0 = desactivado).")]
+    [Range(0f, 2f)]
+    public float duracionRampaGravedad = 0.35f;
+
+    [Header("Impulso de Lanzamiento")]
+    public float impulsoBajaGravedad = 4.2f;
+    public float impulsoAltaGravedad = 4.6f;
+    public float umbralLanzamiento = 0.8f;
+
     [Header("Optimización")]
+    [Tooltip("Segundos antes de desaparecer tras soltarlo (120 = 2 minutos).")]
     public float tiempoDeVida = 120f;
 
-    private Vector3 _posAnteriorMano;
-    private Vector3 _velocidadManoReal;
-
-    // Variables de la fórmula P(t) = P0 + V0*t + 0.5*g*t^2
-    private Vector3 _p0;
-    private Vector3 _v0;
-    private float _gravedadParabolaActual;
-    private float _gravedadCaidaSimple;
-    private float _velocidadBaseSegunGravedad;
-    private float _aporteMaximoMano;
+    private float _gravedadVueloEfectiva;
+    private float _gravedadPisoEfectiva;
+    private float _multiplicadorHorizontal;
+    private float _multiplicadorVertical;
+    private float _frenoHorizontal;
     private float _tiempoVuelo;
 
     void Awake()
@@ -65,110 +64,69 @@ public class DardoVR : MonoBehaviour
         dardoCollider = GetComponent<Collider>();
 
         rb.useGravity = false;
-        rb.linearDamping = 0f;
+        rb.linearDamping = 0f; // Sin rozamiento del aire para no frenar el vuelo.
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
     }
 
     void OnEnable()
     {
-        if (grabbableObject != null)
+        if (UxrGrabManager.Instance != null)
         {
-            grabbableObject.Grabbed += OnGrabbed;
-            grabbableObject.Released += OnReleased;
+            UxrGrabManager.Instance.ObjectGrabbed += OnObjectGrabbed;
+            UxrGrabManager.Instance.ObjectReleased += OnObjectReleased;
         }
     }
 
     void OnDisable()
     {
-        if (grabbableObject != null)
+        if (UxrGrabManager.Instance != null)
         {
-            grabbableObject.Grabbed -= OnGrabbed;
-            grabbableObject.Released -= OnReleased;
+            UxrGrabManager.Instance.ObjectGrabbed -= OnObjectGrabbed;
+            UxrGrabManager.Instance.ObjectReleased -= OnObjectReleased;
         }
     }
 
-    void Update()
+    private void OnObjectGrabbed(object sender, UxrManipulationEventArgs e)
     {
-        if (estaAgarrado && Time.deltaTime > 0f)
+        if (e.GrabbableObject == grabbableObject)
         {
-            Vector3 velInstantanea = (transform.position - _posAnteriorMano) / Time.deltaTime;
-            _velocidadManoReal = Vector3.Lerp(_velocidadManoReal, velInstantanea, 0.5f);
-            _posAnteriorMano = transform.position;
+            estaAgarrado = true;
+            estaEnVuelo = false;
+            estaClavado = false;
+            aplicarEmpuje = false;
+            dardoCollider.enabled = true;
+            transform.SetParent(null);
+
+            rb.isKinematic = false;
+            rb.useGravity = false;
+
+            CancelInvoke(nameof(Desaparecer));
+            CancelInvoke(nameof(ActivarColisiones));
+
+            rb.detectCollisions = false;
         }
     }
 
-    private void OnGrabbed(object sender, UxrManipulationEventArgs e)
+    private void OnObjectReleased(object sender, UxrManipulationEventArgs e)
     {
-        estaAgarrado = true;
-        estaEnVuelo = false;
-        estaClavado = false;
-        fueLanzado = false;
-
-        _posAnteriorMano = transform.position;
-        _velocidadManoReal = Vector3.zero;
-
-        dardoCollider.enabled = true;
-        transform.SetParent(null);
-
-        rb.isKinematic = false;
-        rb.useGravity = false;
-
-        CancelInvoke(nameof(Desaparecer));
-        CancelInvoke(nameof(ActivarColisiones));
-
-        rb.detectCollisions = false;
-    }
-
-    private void OnReleased(object sender, UxrManipulationEventArgs e)
-    {
-        if (UxrGrabManager.Instance != null && UxrGrabManager.Instance.IsBeingGrabbed(grabbableObject))
-            return;
-
-        estaAgarrado = false;
-        estaEnVuelo = true;
-        estaClavado = false;
-        _tiempoVuelo = 0f;
-
-        rb.isKinematic = false;
-        rb.useGravity = false;
-        rb.angularVelocity = Vector3.zero;
-
-        CalcularParametrosSegunGravedad(Physics.gravity.y);
-
-        Vector3 velDetectada = rb.linearVelocity.magnitude > _velocidadManoReal.magnitude
-            ? rb.linearVelocity
-            : _velocidadManoReal;
-
-        float rapidezMano = velDetectada.magnitude;
-
-        if (rapidezMano > umbralLanzamiento)
+        if (e.GrabbableObject == grabbableObject)
         {
-            fueLanzado = true;
+            if (UxrGrabManager.Instance != null && UxrGrabManager.Instance.IsBeingGrabbed(grabbableObject))
+                return;
 
-            Vector3 dirPunta = -transform.forward;
-            Vector3 dirMano = velDetectada.normalized;
+            estaAgarrado = false;
+            estaEnVuelo = true;
+            estaClavado = false;
+            rb.isKinematic = false;
+            rb.useGravity = false;
+            aplicarEmpuje = true;
+            _tiempoVuelo = 0f;
 
-            Vector3 dirCombinada = Vector3.Slerp(dirMano, dirPunta, 0.75f);
+            CalcularParametrosPorGravedad(Physics.gravity.y);
 
-            // Tope de altura muy bajo para que el arco tenga poca amplitud
-            dirCombinada.y = Mathf.Clamp(dirCombinada.y, -0.02f, 0.06f) + elevacionArcoV5;
-            Vector3 dirFinal = dirCombinada.normalized;
-
-            // Aporte de la mano reducido para que nunca salga disparado de más
-            float extraMano = Mathf.Clamp(rapidezMano * 0.4f, 0f, _aporteMaximoMano);
-            float rapidezFinal = _velocidadBaseSegunGravedad + extraMano;
-
-            _p0 = transform.position;
-            _v0 = dirFinal * rapidezFinal;
-            rb.linearVelocity = _v0;
+            Invoke(nameof(ActivarColisiones), 0.1f);
+            Invoke(nameof(Desaparecer), tiempoDeVida);
         }
-        else
-        {
-            fueLanzado = false;
-        }
-
-        Invoke(nameof(ActivarColisiones), 0.08f);
-        Invoke(nameof(Desaparecer), tiempoDeVida);
     }
 
     private void ActivarColisiones()
@@ -182,71 +140,71 @@ public class DardoVR : MonoBehaviour
         Destroy(gameObject);
     }
 
-    private void CalcularParametrosSegunGravedad(float gravedadY)
+    private void CalcularParametrosPorGravedad(float gravedadY)
     {
         float gAbs = Mathf.Abs(gravedadY);
+        float t = Mathf.InverseLerp(0f, 9.81f, gAbs);
 
-        if (gAbs <= 9.81f)
-        {
-            // Mientras menor sea la gravedad, menor es la velocidad (t va de 0 a 1)
-            float t = Mathf.InverseLerp(0f, 9.81f, gAbs);
-            _velocidadBaseSegunGravedad = Mathf.Lerp(velocidadBajaGravedadV5, velocidadTierraV5, t);
-            _gravedadParabolaActual = Mathf.Lerp(gravedadParabolaBajaV5, gravedadParabolaTierraV5, t);
-            _aporteMaximoMano = Mathf.Lerp(0.4f, 1.4f, t);
-        }
-        else
-        {
-            // Rango personalizado superior a la Tierra (9.81 a 19.62)
-            float tExtra = Mathf.InverseLerp(9.81f, 19.62f, gAbs);
-            _velocidadBaseSegunGravedad = Mathf.Lerp(velocidadTierraV5, velocidadAltaGravedadV5, tExtra);
-            _gravedadParabolaActual = Mathf.Lerp(gravedadParabolaTierraV5, gravedadParabolaTierraV5 * 1.6f, tExtra);
-            _aporteMaximoMano = Mathf.Lerp(1.4f, 2.2f, tExtra);
-        }
+        float factorVuelo = Mathf.Lerp(escalaVueloBajaGravedad, escalaVueloTierra, t);
+        _gravedadVueloEfectiva = gAbs * factorVuelo;
 
-        // Gravedad para cuando solo se suelta sin lanzar o tras rebotar en el piso
-        float tPiso = Mathf.InverseLerp(0f, 9.81f, gAbs);
-        float factorPiso = Mathf.Lerp(0.20f, factorEscalaTierraPiso, tPiso);
-        _gravedadCaidaSimple = gAbs * factorPiso;
+        float factorPiso = Mathf.Lerp(escalaVueloBajaGravedad, factorEscalaTierraPiso, t);
+        _gravedadPisoEfectiva = gAbs * factorPiso;
+
+        float tSliderCompleto = Mathf.InverseLerp(0f, 19.62f, gAbs);
+        _multiplicadorHorizontal = Mathf.Lerp(impulsoBajaGravedad, impulsoAltaGravedad, tSliderCompleto);
+
+        // Multiplicadores verticales muy bajos para mantener la línea de vuelo plana.
+        _multiplicadorVertical = Mathf.Lerp(0.55f, 0.45f, tSliderCompleto);
+        _frenoHorizontal = Mathf.Lerp(0.999f, 0.997f, tSliderCompleto);
     }
 
     void FixedUpdate()
     {
         if (rb.isKinematic || estaClavado || estaAgarrado) return;
 
+        if (aplicarEmpuje)
+        {
+            aplicarEmpuje = false;
+            rb.angularVelocity = Vector3.zero;
+
+            float velocidadDeMano = rb.linearVelocity.magnitude;
+
+            if (velocidadDeMano > umbralLanzamiento)
+            {
+                Vector3 direccionMano = rb.linearVelocity.normalized;
+                Vector3 impulsoExtra = (direccionMano * 0.65f) + (Vector3.up * 0.01f);
+                Vector3 vel = rb.linearVelocity + impulsoExtra;
+
+                vel.x *= _multiplicadorHorizontal;
+                vel.z *= _multiplicadorHorizontal;
+                vel.y *= _multiplicadorVertical;
+
+                rb.linearVelocity = vel;
+            }
+        }
+
         if (estaEnVuelo)
         {
-            if (fueLanzado)
-            {
-                // --- FÓRMULA DE LA PARÁBOLA ---
-                // P(t) = P0 + V0 * t + 0.5 * g * t^2
-                // V(t) = V0 + g * t
-                _tiempoVuelo += Time.fixedDeltaTime;
-                float t = _tiempoVuelo;
+            _tiempoVuelo += Time.fixedDeltaTime;
 
-                Vector3 vectorGravedad = Vector3.down * _gravedadParabolaActual;
+            float rampa = duracionRampaGravedad > 0f
+                ? Mathf.Clamp01(_tiempoVuelo / duracionRampaGravedad)
+                : 1f;
 
-                Vector3 velocidadInstantanea = _v0 + (vectorGravedad * t);
-                rb.linearVelocity = velocidadInstantanea;
+            float factorRampa = Mathf.Lerp(gravedadInicialFraccion, 1f, rampa);
 
-                if (velocidadInstantanea.sqrMagnitude > 0.05f)
-                {
-                    transform.forward = -velocidadInstantanea.normalized;
-                }
-            }
-            else
-            {
-                // --- SOLTAR SIN LANZAR ---
-                rb.linearVelocity += Vector3.down * (_gravedadCaidaSimple * Time.fixedDeltaTime);
+            rb.linearVelocity += Vector3.down * (_gravedadVueloEfectiva * factorRampa * Time.fixedDeltaTime);
 
-                if (rb.linearVelocity.sqrMagnitude > 0.1f)
-                {
-                    transform.forward = -rb.linearVelocity.normalized;
-                }
-            }
+            Vector3 velH = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z) * _frenoHorizontal;
+            rb.linearVelocity = new Vector3(velH.x, rb.linearVelocity.y, velH.z);
+
+            if (rb.linearVelocity.sqrMagnitude > 0.1f)
+                transform.forward = -rb.linearVelocity.normalized;
         }
         else
         {
-            rb.linearVelocity += Vector3.down * (_gravedadCaidaSimple * Time.fixedDeltaTime);
+            rb.linearVelocity += Vector3.down * (_gravedadPisoEfectiva * Time.fixedDeltaTime);
         }
     }
 
@@ -255,21 +213,15 @@ public class DardoVR : MonoBehaviour
         if (estaClavado) return;
 
         if (collision.gameObject.CompareTag(tagTablero))
-        {
             ClavarDardo(collision);
-        }
         else
-        {
             estaEnVuelo = false;
-            fueLanzado = false;
-        }
     }
 
     private void ClavarDardo(Collision collision)
     {
         estaClavado = true;
         estaEnVuelo = false;
-        fueLanzado = false;
 
         rb.isKinematic = true;
         rb.linearVelocity = Vector3.zero;
