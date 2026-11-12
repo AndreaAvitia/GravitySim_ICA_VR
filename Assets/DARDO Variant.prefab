@@ -283,6 +283,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 180
       objectReference: {fileID: 0}
+    - target: {fileID: 4703925781393413598, guid: ff14d90706422ae4885322ecdace8967, type: 3}
+      propertyPath: duracionRampaGravedad
+      value: 0.014
+      objectReference: {fileID: 0}
     - target: {fileID: 5827684122655495855, guid: ff14d90706422ae4885322ecdace8967, type: 3}
       propertyPath: materialesReales.Array.size
       value: 3
