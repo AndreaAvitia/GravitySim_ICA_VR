@@ -66,10 +66,10 @@ public class GameFeelManager : MonoBehaviour
     private void ActualizarUI()
     {
         if (textoPuntosBasket != null)
-            textoPuntosBasket.text = $"Básquet: {_puntosBasket}";
+            textoPuntosBasket.text = $"{_puntosBasket}";
 
         if (textoPuntosDardos != null)
-            textoPuntosDardos.text = $"Dardos: {_puntosDardos}";
+            textoPuntosDardos.text = $"{_puntosDardos}";
     }
 
     private void ReproducirSonidoEnPunto(AudioClip clip, Vector3 posicion)
